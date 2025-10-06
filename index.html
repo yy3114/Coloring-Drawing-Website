@@ -1,0 +1,586 @@
+```html
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動式著色本 (修正版)</title>
+    <!-- 載入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans TC', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 自定義樣式 */
+        body {
+            font-family: 'Inter', 'Noto Sans TC', 'sans-serif';
+            background-color: #f3f4f6; 
+        }
+        
+        /* 畫布容器：負責限制視窗和提供裁剪邊界 */
+        #canvasContainer {
+            overflow: hidden; 
+            position: relative;
+            max-width: 512px;
+            max-height: 512px;
+            margin: 0 auto;
+            border: 4px solid #3b82f6;
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            aspect-ratio: 1 / 1; 
+        }
+
+        #coloringCanvas {
+            touch-action: none; /* 禁用瀏覽器默認的觸控行為 (重要) */
+            cursor: pointer;
+            transform-origin: 0 0; /* 縮放和位移的基準點在左上角 */
+            transition: transform 0.1s ease-out; 
+            width: 100%;
+            height: 100%;
+            will-change: transform; 
+        }
+        
+        /* 顏色選擇器樣式 */
+        #colorPicker {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 3.5rem; 
+            height: 3.5rem; 
+            padding: 0;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+        #colorPicker::-webkit-color-swatch-wrapper { padding: 0; }
+        #colorPicker::-webkit-color-swatch { border-radius: 9999px; border: 4px solid white; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
+        #colorPicker::-moz-color-swatch-wrapper { padding: 0; }
+        #colorPicker::-moz-color-swatch { border-radius: 9999px; border: 4px solid white; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
+
+        .preset-color {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.1s;
+            border: 2px solid transparent;
+        }
+        .preset-color:hover {
+            transform: scale(1.1);
+        }
+        .preset-color.selected {
+            border-color: #3b82f6; 
+            box-shadow: 0 0 0 3px #bfdbfe; 
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-xl mx-auto">
+        <h1 class="text-3xl font-extrabold text-gray-800 mb-6 text-center">🖍️ 點擊填色互動式著色本</h1>
+        
+        <!-- 控制面板 -->
+        <div class="bg-white p-4 rounded-xl shadow-lg mb-6 space-y-4">
+            
+            <!-- 顏色選擇區 -->
+            <div class="flex flex-col space-y-3">
+                <label class="text-lg font-semibold text-gray-700">🎨 選擇顏色:</label>
+                
+                <div class="flex flex-wrap items-center space-x-3">
+                    <input type="color" id="colorPicker" value="#FF6347" class="transition duration-200 hover:scale-105">
+
+                    <div id="presetColors" class="flex flex-wrap items-center space-x-2 space-y-2 ml-4">
+                        <!-- 常用顏色 -->
+                        <div id="commonColors" class="flex flex-wrap space-x-2 space-y-2">
+                            <div class="preset-color bg-red-500" data-color="#EF4444" title="紅色"></div>
+                            <div class="preset-color bg-pink-500" data-color="#EC4899" title="粉色"></div>
+                            <div class="preset-color bg-orange-500" data-color="#F97316" title="橘色"></div>
+                            <div class="preset-color bg-yellow-500" data-color="#F59E0B" title="黃色"></div>
+                            <div class="preset-color bg-lime-500" data-color="#84CC16" title="石灰綠"></div>
+                            <div class="preset-color bg-green-500" data-color="#10B981" title="綠色"></div>
+                            <div class="preset-color bg-cyan-500" data-color="#06B6D4" title="青色"></div>
+                            <div class="preset-color bg-blue-500" data-color="#3B82F6" title="藍色"></div>
+                            <div class="preset-color bg-indigo-500" data-color="#6366F1" title="靛藍"></div>
+                            <div class="preset-color bg-purple-500" data-color="#8B5CF6" title="紫色"></div>
+                            <div class="preset-color bg-gray-500" data-color="#6B7280" title="中灰"></div>
+                            <div class="preset-color bg-black" data-color="#000000" title="黑色"></div>
+                            <div class="preset-color bg-white border-gray-300 border" data-color="#FFFFFF" title="白色/橡皮擦"></div>
+                        </div>
+                        <button id="moreColorsBtn" class="bg-blue-500 hover:bg-blue-600 text-white text-sm py-1 px-3 rounded-full transition duration-200">更多顏色</button>
+                        <!-- 額外顏色 (隱藏) -->
+                        <div id="extraColors" class="flex flex-wrap space-x-2 space-y-2 hidden">
+                            <div class="preset-color bg-red-300" data-color="#FCA5A5" title="淺紅"></div>
+                            <div class="preset-color bg-red-700" data-color="#B91C1C" title="深紅"></div>
+                            <div class="preset-color bg-pink-300" data-color="#F9A8D4" title="淺粉"></div>
+                            <div class="preset-color bg-pink-700" data-color="#BE185D" title="深粉"></div>
+                            <div class="preset-color bg-orange-300" data-color="#FDBA74" title="淺橘"></div>
+                            <div class="preset-color bg-orange-700" data-color="#C2410C" title="深橘"></div>
+                            <div class="preset-color bg-yellow-300" data-color="#FCD34D" title="淺黃"></div>
+                            <div class="preset-color bg-yellow-700" data-color="#B45309" title="深黃"></div>
+                            <div class="preset-color bg-lime-300" data-color="#BEF264" title="淺石灰綠"></div>
+                            <div class="preset-color bg-lime-700" data-color="#4D7C0F" title="深石灰綠"></div>
+                            <div class="preset-color bg-green-300" data-color="#6EE7B7" title="淺綠"></div>
+                            <div class="preset-color bg-green-700" data-color="#047857" title="深綠"></div>
+                            <div class="preset-color bg-cyan-300" data-color="#67E8F9" title="淺青"></div>
+                            <div class="preset-color bg-cyan-700" data-color="#0E7490" title="深青"></div>
+                            <div class="preset-color bg-blue-300" data-color="#93C5FD" title="淺藍"></div>
+                            <div class="preset-color bg-blue-700" data-color="#1D4ED8" title="深藍"></div>
+                            <div class="preset-color bg-indigo-300" data-color="#A5B4FC" title="淺靛藍"></div>
+                            <div class="preset-color bg-indigo-700" data-color="#4338CA" title="深靛藍"></div>
+                            <div class="preset-color bg-purple-300" data-color="#C4B5FD" title="淺紫"></div>
+                            <div class="preset-color bg-purple-700" data-color="#5B21B6" title="深紫"></div>
+                            <div class="preset-color bg-gray-300" data-color="#D1D5DB" title="淺灰"></div>
+                            <div class="preset-color bg-gray-700" data-color="#374151" title="深灰"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 顏色深淺調整 -->
+            <div class="flex flex-col space-y-3 pt-2 border-t border-gray-100">
+                <div class="flex items-center space-x-3">
+                    <label class="text-sm text-gray-600 font-medium whitespace-nowrap">🌗 顏色深淺 (0-100):</label>
+                    <input type="range" id="shadeRange" min="0" max="100" value="50" class="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span id="shadeValue" class="text-sm font-bold text-blue-600 w-8 text-right">50</span>
+                </div>
+            </div>
+
+            <!-- 縮放與容忍度設定 -->
+            <div class="flex flex-col space-y-3 pt-2 border-t border-gray-100">
+                <div class="flex items-center space-x-3">
+                    <div id="selectedColorDisplay" class="w-6 h-6 rounded-full border-2 border-gray-400 shadow-inner" style="background-color: #FF6347;"></div>
+                    <span class="text-gray-500 font-medium">當前選色</span>
+                </div>
+                
+                <!-- 縮放控制 -->
+                <div class="flex items-center space-x-3">
+                    <label class="text-sm text-gray-600 font-medium whitespace-nowrap">🔎 畫布縮放:</label>
+                    <button id="zoomOutBtn" class="bg-gray-200 hover:bg-gray-300 p-2 rounded-full font-bold" onclick="changeZoom(-0.25)">-</button>
+                    <span id="zoomLevel" class="text-sm font-bold text-blue-600 w-10 text-center">100%</span>
+                    <button id="zoomInBtn" class="bg-gray-200 hover:bg-gray-300 p-2 rounded-full font-bold" onclick="changeZoom(0.25)">+</button>
+                    <button class="bg-blue-500 hover:bg-blue-600 text-white text-sm py-1 px-3 rounded-full transition duration-200" onclick="resetZoom()">重置</button>
+                </div>
+
+                <!-- 容忍度滑桿 -->
+                <div class="flex items-center space-x-2">
+                    <label for="toleranceRange" class="text-sm text-gray-600 whitespace-nowrap">💦 填色容錯度 (0-100):</label>
+                    <input type="range" id="toleranceRange" min="0" max="100" value="32" class="flex-grow h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                    <span id="toleranceValue" class="text-sm font-bold text-blue-600 w-8 text-right">32</span>
+                </div>
+            </div>
+            
+            <!-- 清除按鈕 -->
+            <button id="clearCanvasBtn" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-xl transition duration-200 shadow-md w-full" onclick="clearCanvas()">
+                清除所有填色
+            </button>
+        </div>
+
+        <!-- 畫布區域 (外層容器負責視窗) -->
+        <div id="canvasContainer" class="w-full aspect-square max-w-lg mx-auto relative rounded-xl border-4 border-blue-500 shadow-lg">
+            <canvas id="coloringCanvas" width="512" height="512"></canvas>
+            <div id="loadingIndicator" class="absolute inset-0 flex items-center justify-center bg-gray-900/50 rounded-xl hidden">
+                <div class="text-white text-xl font-bold p-4 rounded-lg bg-black/50 flex items-center space-x-3">
+                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <span>載入線稿中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 錯誤訊息 -->
+        <div id="messageBox" class="p-3 bg-blue-100 text-blue-700 rounded-lg mt-6 text-center hidden" role="alert"></div>
+    </div>
+
+    <script>
+        // --- 變數設置 ---
+        const IMAGE_URL = 'https://i.postimg.cc/VNQhLmjs/1759711736389.jpg'; 
+        const CANVAS_SIZE = 512;
+
+        const canvas = document.getElementById('coloringCanvas');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const ctx = canvas.getContext('2d');
+        canvas.width = CANVAS_SIZE;
+        canvas.height = CANVAS_SIZE;
+
+        const colorPicker = document.getElementById('colorPicker');
+        const selectedColorDisplay = document.getElementById('selectedColorDisplay');
+        const toleranceRange = document.getElementById('toleranceRange');
+        const toleranceValueSpan = document.getElementById('toleranceValue');
+        const shadeRange = document.getElementById('shadeRange');
+        const shadeValueSpan = document.getElementById('shadeValue');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const messageBox = document.getElementById('messageBox');
+        const zoomLevelSpan = document.getElementById('zoomLevel');
+        
+        let originalImageData = null; 
+        let currentZoom = 1.0; 
+        let offsetX = 0; // 畫布位移 (styled px 單位)
+        let offsetY = 0; 
+        
+        let isDragging = false;
+        let dragStartX = 0; 
+        let dragStartY = 0; 
+        const DRAG_THRESHOLD = 5; 
+        let totalMoved = 0; 
+
+        // --- 縮放和拖曳控制 ---
+
+        function applyTransform() {
+            canvas.style.transform = `scale(${currentZoom}) translate(${offsetX}px, ${offsetY}px)`;
+        }
+
+        function clampOffset() {
+            const containerSize = canvasContainer.clientWidth; // 假設寬高相同
+            const styledSize = containerSize; // canvas width 100%
+            const scaledSize = styledSize * currentZoom;
+            
+            // X 軸限制
+            if (scaledSize > containerSize) {
+                const minPanX = (containerSize - scaledSize) / currentZoom;
+                const maxPanX = 0;
+                offsetX = Math.max(minPanX, Math.min(maxPanX, offsetX));
+            } else {
+                offsetX = (containerSize - scaledSize) / (2 * currentZoom);
+            }
+
+            // Y 軸限制
+            if (scaledSize > containerSize) {
+                const minPanY = (containerSize - scaledSize) / currentZoom;
+                const maxPanY = 0;
+                offsetY = Math.max(minPanY, Math.min(maxPanY, offsetY));
+            } else {
+                offsetY = (containerSize - scaledSize) / (2 * currentZoom);
+            }
+        }
+
+        function changeZoom(delta) {
+            let newZoom = currentZoom + delta;
+            newZoom = Math.max(1.0, Math.min(4.0, newZoom));
+            currentZoom = newZoom;
+            
+            clampOffset();
+            applyTransform();
+
+            zoomLevelSpan.textContent = `${Math.round(currentZoom * 100)}%`;
+            if (currentZoom > 1.0) {
+                 showMessage("畫布已放大。現在可以拖曳畫布來移動視圖。", 'info');
+            } else {
+                 showMessage("畫布已重置為 100% 縮放。", 'info');
+            }
+        }
+
+        function resetZoom() {
+            currentZoom = 1.0;
+            offsetX = 0;
+            offsetY = 0;
+            clampOffset(); 
+            applyTransform();
+            zoomLevelSpan.textContent = `100%`;
+            showMessage("畫布已重置為 100% 縮放。", 'info');
+        }
+
+        // --- 拖曳事件處理 ---
+
+        function getClientCoords(event) {
+            if (event.touches && event.touches.length) {
+                return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+            }
+            return { x: event.clientX, y: event.clientY };
+        }
+
+        function handleDragStart(event) {
+            isDragging = true;
+            totalMoved = 0;
+            const coords = getClientCoords(event);
+            dragStartX = coords.x;
+            dragStartY = coords.y;
+            
+            if (currentZoom > 1.0) {
+                 canvas.style.cursor = 'grabbing';
+            }
+            
+            if (event.type === 'touchstart') {
+                event.preventDefault(); 
+            }
+        }
+
+        function handleDragMove(event) {
+            if (!isDragging) return;
+
+            const coords = getClientCoords(event);
+            
+            const screenDx = coords.x - dragStartX;
+            const screenDy = coords.y - dragStartY;
+            
+            totalMoved += Math.sqrt(screenDx * screenDx + screenDy * screenDy);
+
+            if (currentZoom > 1.0) {
+                const dx = screenDx / currentZoom;
+                const dy = screenDy / currentZoom;
+                
+                offsetX += dx;
+                offsetY += dy;
+                
+                clampOffset(); 
+                applyTransform();
+
+                dragStartX = coords.x;
+                dragStartY = coords.y;
+            }
+            
+            if (event.type === 'touchmove') {
+                 event.preventDefault();
+            }
+        }
+
+        function handleDragEnd(event) {
+            if (isDragging) {
+                isDragging = false;
+                canvas.style.cursor = 'pointer';
+
+                if (totalMoved < DRAG_THRESHOLD) {
+                    handleCanvasColoring(event);
+                }
+            }
+            totalMoved = 0;
+        }
+
+        // --- 畫布點擊/填色事件 ---
+
+        function handleCanvasColoring(event) {
+            if (!originalImageData) {
+                showMessage("線稿尚未載入，請稍候。", 'error');
+                return;
+            }
+            
+            const coords = event.changedTouches && event.changedTouches.length 
+                ? { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY }
+                : { x: event.clientX, y: event.clientY };
+
+            const rect = canvasContainer.getBoundingClientRect();
+
+            const x_client_rel = coords.x - rect.left;
+            const y_client_rel = coords.y - rect.top;
+
+            const containerSize = canvasContainer.clientWidth;
+            const pixelRatio = CANVAS_SIZE / containerSize;
+
+            const styledX = (x_client_rel / currentZoom) - offsetX;
+            const styledY = (y_client_rel / currentZoom) - offsetY;
+
+            const x = Math.floor(styledX * pixelRatio);
+            const y = Math.floor(styledY * pixelRatio);
+
+            if (x < 0 || x >= CANVAS_SIZE || y < 0 || y >= CANVAS_SIZE) {
+                return;
+            }
+
+            const selectedHex = colorPicker.value;
+            let fillColor = hexToRgbaArray(selectedHex);
+
+            const shade = parseInt(shadeRange.value) / 100;
+            fillColor = adjustShade(fillColor, shade);
+
+            const tolerance = parseInt(toleranceRange.value);
+
+            floodFill(x, y, fillColor, tolerance);
+        }
+
+
+        // --- 輔助函數 ---
+        function showMessage(message, type = 'info') {
+            messageBox.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-yellow-100', 'text-yellow-700', 'bg-blue-100', 'text-blue-700');
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'text-red-700');
+            } else if (type === 'info') {
+                 messageBox.classList.add('bg-blue-100', 'text-blue-700');
+            } else {
+                 messageBox.classList.add('bg-yellow-100', 'text-yellow-700');
+            }
+            messageBox.classList.remove('hidden');
+            setTimeout(() => { messageBox.classList.add('hidden'); }, 5000);
+        }
+
+        function hexToRgbaArray(hex) {
+            const r = parseInt(hex.substring(1, 3), 16);
+            const g = parseInt(hex.substring(3, 5), 16);
+            const b = parseInt(hex.substring(5, 7), 16);
+            return [r, g, b, 255]; 
+        }
+
+        function adjustShade(color, shade) {
+            const factor = shade * 2;
+            const [r, g, b, a] = color;
+            return [
+                Math.min(255, Math.max(0, Math.floor(r * factor))),
+                Math.min(255, Math.max(0, Math.floor(g * factor))),
+                Math.min(255, Math.max(0, Math.floor(b * factor))),
+                a
+            ];
+        }
+
+        function getPixelIndex(x, y) {
+            return (y * CANVAS_SIZE + x) * 4;
+        }
+
+        function getPixelColor(data, x, y) {
+            const i = getPixelIndex(x, y);
+            return [data[i], data[i + 1], data[i + 2], data[i + 3]];
+        }
+
+        function colorsMatchWithTolerance(color1, color2, tolerance) {
+            const rDiff = color1[0] - color2[0];
+            const gDiff = color1[1] - color2[1];
+            const bDiff = color1[2] - color2[2];
+            const distSq = rDiff * rDiff + gDiff * gDiff + bDiff * bDiff;
+            const toleranceSq = tolerance * tolerance * 3; 
+            return distSq <= toleranceSq;
+        }
+
+        function floodFill(startX, startY, fillColor, tolerance) {
+            if (!originalImageData) return;
+            const imageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            const data = imageData.data;
+            const targetColor = getPixelColor(data, startX, startY);
+            
+            if (colorsMatchWithTolerance(targetColor, fillColor, 0)) {
+                return;
+            }
+            const stack = [[startX, startY]];
+            const processed = new Uint8Array(CANVAS_SIZE * CANVAS_SIZE); 
+
+            while (stack.length) {
+                const [x, y] = stack.pop();
+                const pixelIndex = y * CANVAS_SIZE + x;
+                if (x < 0 || x >= CANVAS_SIZE || y < 0 || y >= CANVAS_SIZE) { continue; }
+                if (processed[pixelIndex] === 1 || processed[pixelIndex] === 2) { continue; }
+                
+                const currentColor = getPixelColor(data, x, y);
+
+                if (colorsMatchWithTolerance(currentColor, targetColor, tolerance)) {
+                    processed[pixelIndex] = 1; 
+
+                    const i = getPixelIndex(x, y);
+                    data[i] = fillColor[0];     
+                    data[i + 1] = fillColor[1]; 
+                    data[i + 2] = fillColor[2]; 
+                    data[i + 3] = fillColor[3]; 
+
+                    stack.push([x + 1, y]); 
+                    stack.push([x - 1, y]); 
+                    stack.push([x, y + 1]); 
+                    stack.push([x, y - 1]); 
+                } else {
+                    processed[pixelIndex] = 2; 
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function clearCanvas() {
+            if (originalImageData) {
+                ctx.putImageData(originalImageData, 0, 0);
+                showMessage("已清除所有填色，恢復原始線稿。", 'info');
+            }
+        }
+
+        function loadImage() {
+            loadingIndicator.classList.remove('hidden');
+            const img = new Image();
+            img.crossOrigin = "Anonymous"; 
+            img.onload = function() {
+                ctx.drawImage(img, 0, 0, CANVAS_SIZE, CANVAS_SIZE);
+                try {
+                    originalImageData = ctx.getImageData(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+                    showMessage("線稿載入成功！現在可以放大並拖曳移動畫布。", 'info');
+                    resetZoom(); 
+                } catch (e) {
+                    showMessage("線稿載入成功，但由於跨域限制 (CORS)，無法讀取像素數據。", 'error');
+                    console.error("CORS Error: 無法讀取像素數據。", e);
+                }
+
+                loadingIndicator.classList.add('hidden');
+            };
+            img.onerror = function() {
+                loadingIndicator.classList.add('hidden');
+                showMessage(`圖片載入失敗，請檢查 URL (${IMAGE_URL}) 是否有效。`, 'error');
+            };
+            img.src = IMAGE_URL;
+        }
+
+        function handleColorChange(newColor) {
+            colorPicker.value = newColor;
+            let fillColor = hexToRgbaArray(newColor);
+            const shade = parseInt(shadeRange.value) / 100;
+            fillColor = adjustShade(fillColor, shade);
+            selectedColorDisplay.style.backgroundColor = `rgba(${fillColor[0]}, ${fillColor[1]}, ${fillColor[2]}, ${fillColor[3]/255})`;
+            
+            document.querySelectorAll('.preset-color').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            const matchedPreset = document.querySelector(`.preset-color[data-color='${newColor.toUpperCase()}']`);
+            if (matchedPreset) {
+                matchedPreset.classList.add('selected');
+            }
+        }
+
+        // --- 應用程式啟動 ---
+        window.onload = function() {
+            loadImage();
+            
+            canvas.addEventListener('mousedown', handleDragStart);
+            canvas.addEventListener('mousemove', handleDragMove);
+            window.addEventListener('mouseup', handleDragEnd); 
+            canvas.addEventListener('mouseleave', () => { 
+                if (isDragging) handleDragEnd(); 
+            });
+
+            canvas.addEventListener('touchstart', handleDragStart);
+            canvas.addEventListener('touchmove', handleDragMove);
+            window.addEventListener('touchend', handleDragEnd); 
+
+            const presetColorsContainer = document.getElementById('presetColors');
+            colorPicker.addEventListener('input', (e) => handleColorChange(e.target.value));
+
+            presetColorsContainer.addEventListener('click', (e) => {
+                const colorDiv = e.target.closest('.preset-color');
+                if (colorDiv) {
+                    const newColor = colorDiv.dataset.color;
+                    handleColorChange(newColor);
+                }
+            });
+
+            toleranceRange.addEventListener('input', (e) => {
+                toleranceValueSpan.textContent = e.target.value;
+            });
+
+            shadeRange.addEventListener('input', (e) => {
+                shadeValueSpan.textContent = e.target.value;
+                handleColorChange(colorPicker.value);
+            });
+
+            // 更多顏色按鈕
+            const moreColorsBtn = document.getElementById('moreColorsBtn');
+            const extraColors = document.getElementById('extraColors');
+            moreColorsBtn.addEventListener('click', () => {
+                extraColors.classList.toggle('hidden');
+                moreColorsBtn.textContent = extraColors.classList.contains('hidden') ? '更多顏色' : '隱藏顏色';
+            });
+
+            handleColorChange(colorPicker.value);
+            document.querySelector('.preset-color').classList.add('selected');
+        };
+    </script>
+</body>
+</html>
+```
